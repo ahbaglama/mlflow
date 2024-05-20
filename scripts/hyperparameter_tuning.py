@@ -7,33 +7,31 @@ from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
 
-# Set the MLflow tracking URI to the server
 mlflow.set_tracking_uri("http://127.0.0.1:5002/")
 
-# Set or create an experiment
 mlflow.set_experiment("Hyperparameter_Tuning_With_MLOps_Data")
 
 # Load the dataset
-df = pd.read_csv('./data/mlops_data.csv')
+df = pd.read_csv('../data/mlops_data.csv')
 X = df.drop('target', axis=1)
 y = df['target']
 
-# Standardize the data
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# Split the data
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.25, random_state=42)
 
-# Define the objective function to minimize
 def objective(params):
     model_name = params['model_name']
     model_params = params['params']
     model = params['model'](random_state=42, **model_params)
     
-    with mlflow.start_run(run_name=model_name):
+    # Construct a detailed run name including the model name and key parameters
+    run_name = f"{model_name}, Params: " + ", ".join(f"{k}={v}" for k, v in model_params.items())
+    
+    with mlflow.start_run(run_name=run_name):
         mlflow.log_params(model_params)
-        mlflow.set_tag("model", model_name)  # Tag each run with the model name for easier filtering
+        mlflow.set_tag("model", model_name) 
         model.fit(X_train, y_train)
         predictions = model.predict(X_test)
         
@@ -42,7 +40,7 @@ def objective(params):
         
         # Check if the model supports probability estimates and calculate if possible
         if hasattr(model, 'predict_proba'):
-            probabilities = model.predict_proba(X_test)[:, 1]  # probabilities for ROC-AUC score
+            probabilities = model.predict_proba(X_test)[:, 1] 
             roc_auc = roc_auc_score(y_test, probabilities)
             mlflow.log_metric("roc_auc", roc_auc)
 
@@ -84,7 +82,7 @@ space = hp.choice('classifier_type', [
             'max_depth': hp.choice('gb_max_depth', [3, 5, 10])
         }
     },
-        {
+    {
         'model_name': 'SVM',
         'model': SVC,
         'params': {
@@ -95,9 +93,7 @@ space = hp.choice('classifier_type', [
     }
 ])
 
-# Run the optimizer
-
 trials = Trials()
-best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=25, trials=trials)
+best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=20, trials=trials)
 
 print("Best parameters: ", best)
